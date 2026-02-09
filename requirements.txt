@@ -1,0 +1,6 @@
+telethon
+aiogram>=3.0
+openai
+python-dotenv
+sqlalchemy
+asyncpg
