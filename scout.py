@@ -1,6 +1,7 @@
 import asyncio
 import os
 from telethon import TelegramClient, functions
+from sqlalchemy import select
 from dotenv import load_dotenv
 from database import init_db, async_session, Source
 
@@ -18,30 +19,35 @@ async def search_and_save():
     
     async with async_session() as session:
         for key in keywords:
+            key = key.strip()
             print(f"🔎 Searching for: {key}")
             try:
                 result = await client(functions.contacts.SearchRequest(q=key, limit=20))
                 for chat in result.chats:
-                    # Фильтруем каналы/группы
                     if hasattr(chat, 'username') and chat.username:
                         link = f"https://t.me/{chat.username}"
                         
-                        # Проверка на дубли в БД
+                        # Проверка на дубли через SQLAlchemy
                         existing = await session.execute(
-                            f"SELECT id FROM sources WHERE link = '{link}'"
+                            select(Source).where(Source.link == link)
                         )
                         if not existing.scalar():
                             new_source = Source(platform='telegram', link=link, title=chat.title)
                             session.add(new_source)
-                            print(f"   ✅ Added: {chat.title}")
+                            print(f"   ✅ Added: {chat.title} ({link})")
+                        else:
+                            print(f"   ⏭️ Already exists: {chat.title}")
             except Exception as e:
-                print(f"Error searching {key}: {e}")
+                print(f"Error searching '{key}': {e}")
             
-            await asyncio.sleep(2) # Anti-spam delay
+            await asyncio.sleep(2)  # Anti-spam delay
         
         await session.commit()
     print("🏁 Scouting finished.")
 
+async def main():
+    await init_db()
+    await search_and_save()
+
 if __name__ == '__main__':
-    asyncio.run(init_db())
-    client.loop.run_until_complete(search_and_save())
+    asyncio.run(main())
